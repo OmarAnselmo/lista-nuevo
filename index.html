@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lista de Pagos</title>
+<style>
+  :root{
+    --bg:#f4f5f7; --card:#ffffff; --primary:#2f6feb; --primary-dark:#1f4fb0;
+    --text:#1c1f26; --muted:#6b7280; --danger:#e0503f; --ok:#2ba86a; --border:#e3e5ea;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);}
+  .wrap{max-width:640px;margin:0 auto;padding:16px;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px;}
+  h1{font-size:1.3rem;margin:0 0 4px;}
+  h2{font-size:1.05rem;margin:0 0 12px;}
+  .muted{color:var(--muted);font-size:.85rem;}
+  input,select{width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:1rem;margin-top:4px;}
+  label{font-size:.85rem;color:var(--muted);}
+  button{cursor:pointer;border:none;border-radius:8px;padding:10px 14px;font-size:.95rem;font-weight:600;}
+  .btn-primary{background:var(--primary);color:#fff;width:100%;}
+  .btn-primary:active{background:var(--primary-dark);}
+  .btn-secondary{background:#eef1f6;color:var(--text);}
+  .btn-danger{background:#fdece9;color:var(--danger);}
+  .row{display:flex;gap:8px;align-items:center;margin-top:10px;}
+  .row > *{flex:1;}
+  .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+  .pill{background:#eef1f6;border-radius:999px;padding:4px 10px;font-size:.8rem;}
+  .entry{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);}
+  .entry:last-child{border-bottom:none;}
+  .entry .nombre{flex:1;font-weight:500;}
+  .entry input[type=number]{width:90px;margin-top:0;}
+  .paid{color:var(--ok);font-size:1.1rem;}
+  .unpaid{color:var(--danger);font-size:1.1rem;}
+  .totales{display:flex;justify-content:space-between;margin-top:14px;font-size:.95rem;}
+  .totales b{font-size:1.1rem;}
+  .hidden{display:none !important;}
+  .error{color:var(--danger);font-size:.85rem;margin-top:6px;}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-end;justify-content:center;z-index:10;}
+  .modal{background:#fff;border-radius:16px 16px 0 0;padding:20px;width:100%;max-width:640px;max-height:85vh;overflow-y:auto;}
+  .userline{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);}
+  .userline .name{flex:1;}
+  .link{background:none;color:var(--primary);text-decoration:underline;padding:0;font-weight:500;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- LOGIN -->
+  <div id="loginView" class="card">
+    <h1>Lista de Pagos</h1>
+    <p class="muted">Ingresá con tu usuario y contraseña.</p>
+    <label>Usuario</label>
+    <input id="loginUser" autocomplete="username">
+    <label>Contraseña</label>
+    <input id="loginPass" type="password" autocomplete="current-password">
+    <div class="row"><button class="btn-primary" onclick="doLogin()">Entrar</button></div>
+    <div id="loginError" class="error hidden">Usuario o contraseña incorrectos.</div>
+  </div>
+
+  <!-- APP -->
+  <div id="appView" class="hidden">
+    <div class="top">
+      <div>
+        <h1 id="listTitle">Lista</h1>
+        <span class="pill" id="userPill"></span>
+      </div>
+      <button class="btn-secondary" onclick="doLogout()">Salir</button>
+    </div>
+
+    <div class="card" id="adminBar" class="hidden">
+      <h2>Panel de administrador</h2>
+      <div class="row">
+        <button class="btn-secondary" onclick="openUsersModal()">Gestionar usuarios</button>
+        <button class="btn-secondary" onclick="openNewYearModal()">Nueva lista del año</button>
+      </div>
+      <label style="margin-top:10px;display:block;">Monto a cobrar por persona (Bs)</label>
+      <input id="tarifaInput" type="number" step="0.01" onchange="updateTarifa()">
+    </div>
+
+    <div class="card">
+      <h2>Personas</h2>
+      <div id="entries"></div>
+      <div class="row" id="addEntryRow">
+        <input id="newEntryName" placeholder="Nombre nuevo">
+        <button class="btn-secondary" onclick="addEntry()">Agregar</button>
+      </div>
+      <div class="totales">
+        <span>Tarifa: <b id="tarifaShow">-</b></span>
+        <span>Total recaudado: <b id="totalShow">-</b></span>
+      </div>
+      <div class="totales">
+        <span>Meta (tarifa x personas): <b id="metaShow">-</b></span>
+        <span>Faltan: <b id="faltaShow">-</b></span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- MODAL: usuarios -->
+<div id="usersModalBg" class="modal-bg hidden">
+  <div class="modal">
+    <h2>Gestionar usuarios</h2>
+    <div id="usersList"></div>
+    <hr>
+    <label>Nuevo usuario</label>
+    <input id="newUserName" placeholder="usuario">
+    <label>Contraseña</label>
+    <input id="newUserPass" placeholder="contraseña">
+    <label>Rol</label>
+    <select id="newUserRole">
+      <option value="usuario">usuario</option>
+      <option value="admin">admin</option>
+    </select>
+    <div class="row"><button class="btn-primary" onclick="addUser()">Crear usuario</button></div>
+    <div class="row"><button class="link" onclick="closeModal('usersModalBg')">Cerrar</button></div>
+  </div>
+</div>
+
+<!-- MODAL: nueva lista -->
+<div id="newYearModalBg" class="modal-bg hidden">
+  <div class="modal">
+    <h2>Nueva lista del año</h2>
+    <label>Nombre de la lista (ej. 2027)</label>
+    <input id="newYearName" placeholder="2027">
+    <p class="muted">Se crea vacía; después agregás las personas desde la pantalla principal.</p>
+    <div class="row"><button class="btn-primary" onclick="createNewYear()">Crear y usar esta lista</button></div>
+    <div class="row"><button class="link" onclick="closeModal('newYearModalBg')">Cerrar</button></div>
+  </div>
+</div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+/* ============================================================
+   1) PEGÁ ACÁ LA CONFIGURACIÓN DE TU PROYECTO DE FIREBASE
+   (la sacás de: Configuración del proyecto > Tus apps > SDK)
+   ============================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyB7iRvvcB7fYSPN-iEZXTZXk8i8qwoPjV0",
+  authDomain: "lista-anual.firebaseapp.com",
+  projectId: "lista-anual",
+  storageBucket: "lista-anual.firebasestorage.app",
+  messagingSenderId: "903099688698",
+  appId: "1:903099688698:web:af0eac8508be8cf92f0b43"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+let currentUser = null;   // {username, role}
+let currentYear = null;
+let unsubList = null;
+
+// --- Entrar en modo anónimo para que las reglas de Firestore permitan leer/escribir ---
+auth.signInAnonymously().catch(e => console.error("Error auth anónima:", e));
+
+// ---------------- LOGIN ----------------
+async function doLogin(){
+  const u = document.getElementById('loginUser').value.trim();
+  const p = document.getElementById('loginPass').value;
+  document.getElementById('loginError').classList.add('hidden');
+  if(!u || !p) return;
+  try{
+    const doc = await db.collection('users').doc(u).get();
+    if(!doc.exists || doc.data().password !== p){
+      document.getElementById('loginError').classList.remove('hidden');
+      return;
+    }
+    currentUser = { username: u, role: doc.data().role };
+    sessionStorage.setItem('lp_user', JSON.stringify(currentUser));
+    showApp();
+  }catch(e){
+    console.error(e);
+    document.getElementById('loginError').classList.remove('hidden');
+  }
+}
+
+function doLogout(){
+  currentUser = null;
+  sessionStorage.removeItem('lp_user');
+  if(unsubList) unsubList();
+  document.getElementById('appView').classList.add('hidden');
+  document.getElementById('loginView').classList.remove('hidden');
+}
+
+// ---------------- APP ----------------
+async function showApp(){
+  document.getElementById('loginView').classList.add('hidden');
+  document.getElementById('appView').classList.remove('hidden');
+  document.getElementById('userPill').textContent = currentUser.username + ' · ' + currentUser.role;
+  document.getElementById('adminBar').classList.toggle('hidden', currentUser.role !== 'admin');
+  document.getElementById('addEntryRow').classList.toggle('hidden', currentUser.role !== 'admin');
+
+  const meta = await db.collection('meta').doc('current').get();
+  currentYear = meta.exists ? meta.data().year : null;
+  if(!currentYear){
+    // primera vez: crear lista inicial
+    currentYear = String(new Date().getFullYear());
+    await db.collection('meta').doc('current').set({year: currentYear});
+    await db.collection('lists').doc(currentYear).set({tarifa: 0.5, entries: []});
+  }
+  listenToList();
+}
+
+function listenToList(){
+  if(unsubList) unsubList();
+  unsubList = db.collection('lists').doc(currentYear).onSnapshot(doc => {
+    if(!doc.exists) return;
+    renderList(doc.data());
+  });
+  document.getElementById('listTitle').textContent = 'Lista ' + currentYear;
+}
+
+function renderList(data){
+  const entries = data.entries || [];
+  const tarifa = data.tarifa || 0;
+  document.getElementById('tarifaInput').value = tarifa;
+  document.getElementById('tarifaShow').textContent = 'Bs ' + tarifa.toFixed(2);
+
+  const cont = document.getElementById('entries');
+  cont.innerHTML = '';
+  let total = 0, pagados = 0;
+  entries.forEach((e, i) => {
+    const monto = Number(e.monto) || 0;
+    total += monto;
+    if(monto >= tarifa && tarifa > 0) pagados++;
+    const div = document.createElement('div');
+    div.className = 'entry';
+    div.innerHTML = `
+      <span class="${monto >= tarifa && tarifa > 0 ? 'paid':'unpaid'}">${monto >= tarifa && tarifa > 0 ? '✔' : '○'}</span>
+      <span class="nombre">${e.nombre}</span>
+      <input type="number" step="0.01" value="${monto}" onchange="updateMonto(${i}, this.value)">
+      ${currentUser.role === 'admin' ? `<button class="btn-danger" onclick="removeEntry(${i})">✕</button>` : ''}
+    `;
+    cont.appendChild(div);
+  });
+
+  const meta = tarifa * entries.length;
+  document.getElementById('metaShow').textContent = 'Bs ' + meta.toFixed(2);
+  document.getElementById('totalShow').textContent = 'Bs ' + total.toFixed(2);
+  document.getElementById('faltaShow').textContent = (entries.length - pagados) + ' de ' + entries.length;
+}
+
+async function updateMonto(index, value){
+  const ref = db.collection('lists').doc(currentYear);
+  const doc = await ref.get();
+  const entries = doc.data().entries || [];
+  entries[index].monto = Number(value) || 0;
+  await ref.update({entries});
+}
+
+async function updateTarifa(){
+  const val = Number(document.getElementById('tarifaInput').value) || 0;
+  await db.collection('lists').doc(currentYear).update({tarifa: val});
+}
+
+async function addEntry(){
+  const name = document.getElementById('newEntryName').value.trim();
+  if(!name) return;
+  const ref = db.collection('lists').doc(currentYear);
+  const doc = await ref.get();
+  const entries = doc.data().entries || [];
+  entries.push({nombre: name, monto: 0});
+  await ref.update({entries});
+  document.getElementById('newEntryName').value = '';
+}
+
+async function removeEntry(index){
+  const ref = db.collection('lists').doc(currentYear);
+  const doc = await ref.get();
+  const entries = doc.data().entries || [];
+  entries.splice(index, 1);
+  await ref.update({entries});
+}
+
+// ---------------- ADMIN: usuarios ----------------
+function openUsersModal(){
+  document.getElementById('usersModalBg').classList.remove('hidden');
+  loadUsers();
+}
+function closeModal(id){ document.getElementById(id).classList.add('hidden'); }
+
+async function loadUsers(){
+  const snap = await db.collection('users').get();
+  const cont = document.getElementById('usersList');
+  cont.innerHTML = '';
+  snap.forEach(doc => {
+    const d = doc.data();
+    const div = document.createElement('div');
+    div.className = 'userline';
+    div.innerHTML = `<span class="name">${doc.id} · ${d.role}</span>
+      <button class="btn-danger" onclick="deleteUser('${doc.id}')">Eliminar</button>`;
+    cont.appendChild(div);
+  });
+}
+
+async function addUser(){
+  const u = document.getElementById('newUserName').value.trim();
+  const p = document.getElementById('newUserPass').value;
+  const r = document.getElementById('newUserRole').value;
+  if(!u || !p) return;
+  await db.collection('users').doc(u).set({password: p, role: r});
+  document.getElementById('newUserName').value = '';
+  document.getElementById('newUserPass').value = '';
+  loadUsers();
+}
+
+async function deleteUser(username){
+  if(username === currentUser.username){ alert('No podés eliminar tu propio usuario mientras estás conectado.'); return; }
+  await db.collection('users').doc(username).delete();
+  loadUsers();
+}
+
+// ---------------- ADMIN: nueva lista del año ----------------
+function openNewYearModal(){ document.getElementById('newYearModalBg').classList.remove('hidden'); }
+
+async function createNewYear(){
+  const year = document.getElementById('newYearName').value.trim();
+  if(!year) return;
+  await db.collection('lists').doc(year).set({tarifa: 0.5, entries: []});
+  await db.collection('meta').doc('current').set({year});
+  currentYear = year;
+  closeModal('newYearModalBg');
+  listenToList();
+}
+
+// ---------------- Recuperar sesión ----------------
+const saved = sessionStorage.getItem('lp_user');
+if(saved){ currentUser = JSON.parse(saved); showApp(); }
+</script>
+</body>
+</html>
